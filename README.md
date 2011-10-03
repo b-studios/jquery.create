@@ -14,7 +14,7 @@ Features
 
 
 Example: Usage of Classes
-------------------------_
+-------------------------
 
     jQuery.create('Person', {
 
@@ -98,7 +98,7 @@ will be added to the class aswell.
 
     jQuery.create('Communicator', {
         mixins: ['Greeter', 'GoodBye']
-    });    
+    });
 
     jQuery.create('MyClass', {
 
