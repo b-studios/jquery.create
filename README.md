@@ -1,7 +1,7 @@
 An Object-Orientation System for jQuery
 =======================================
 
-**WARNING** This plugin is in early development stage and only tested in Chromium/Linux!
+**WARNING** This plugin is in early development stage and only tested in Chromium 13.0/Linux and Firefox 7.01/Linux
 Of course [jquery](http://jQuery.com) is required for this plugin to work.
 
 Features

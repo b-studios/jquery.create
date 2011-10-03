@@ -8,11 +8,11 @@
       jQuery.create('Person', {
 
         initialize: function(name, age) {
-            this.name = name;
+            this.fullname = name;
             this.age = age;
         },
 
-        say_hello: function() { return "Hello, my name is " + this.name + " and i'm " + this.age + " years old"; }
+        say_hello: function() { return "Hello, my name is " + this.fullname + " and i'm " + this.age + " years old"; }
       });
 
       jQuery.create('Student', {
@@ -64,7 +64,7 @@
     var person = new Person('John Doe', 31);
 
     equal( person.say_hello(), "Hello, my name is John Doe and i'm 31 years old" );
-    equal( person.name,        'John Doe' );
+    equal( person.fullname,        'John Doe' );
     equal( person.age,         31 );
 
     equal( person.klass.toString(), "Person" );
@@ -79,7 +79,7 @@
 
     equal( stud.say_hello(), "Hello, my name is John Doe and i'm 31 years old" );
     equal( stud.study(),     "I'm studying and my id is: 12334" );
-    equal( stud.name,        'John Doe' );
+    equal( stud.fullname,        'John Doe' );
     equal( stud.age,         31 );
     equal( stud.studentid,   12334 );
 
@@ -94,7 +94,7 @@
 
     equal( stud.say_hello(), "Hello, my name is John Doe and i'm 31 years old" );
     equal( stud.study(),     "I'm studying and my id is: nonumber" );
-    equal( stud.name,        'John Doe' );
+    equal( stud.fullname,        'John Doe' );
     equal( stud.age,         31 );
     equal( stud.studentid,   "nonumber" );
 
