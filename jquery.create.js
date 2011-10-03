@@ -22,6 +22,13 @@
 
   /**
    * @function $.resolve
+   * Resolves the given name, starting at the global context. If the repair-option is choosen, all
+   * missing nodes are inserted as blank objects.
+   * 
+   * @param [String] name The path to resolve
+   * @param [Boolean] repair If you wish to automatically repair missing nodes and insert {} instead
+   * 
+   * @return [Object] The resolved Object
    */
   if(typeof $.resolve !== 'function')
     $.resolve = function(name, repair) {
@@ -41,26 +48,17 @@
       return curr;
     };
 
-  /**
-   * @function $.clone_without
-   * Makes a shallow copy of source without the specified keys
-   */    
-  if(typeof $.clone_without !== 'function')
-    $.clone_without = function(source) {
-      var keys = Array.prototype.slice.call(arguments, 1,arguments.length),
-          copy = {};
-      
-      for(var prop in source) {
-        if(source.hasOwnProperty(prop) && keys.indexOf(prop) == -1)
-          copy[prop] = source[prop];
-      }
-      return copy;
-    };
-
-  /**
-   * @function $.define
-   */
   if(typeof $.define !== 'function')
+
+    /**
+     * @function $.define
+     * Defines `name` as `obj` and therefore requires `$.resolve`
+     * 
+     * @param [String] name The name or path where to save `obj` under
+     * @param [Object] obj The object you wish to save
+     * 
+     * @return [Object] Just returns `obj` after saving
+     */
     $.define = function(name, obj) {
       var last = name.lastIndexOf('.'),
           scope = globals;
@@ -69,104 +67,119 @@
         scope = $.resolve(name.substring(0,last), true);
         name = name.substring(last+1, name.length);
       }
-      scope[name] = obj;         
+      scope[name] = obj;
+      return obj;    
     }
 
-    if(typeof $.sym !== 'function')
-      $.sym = (function() {
-        
-        function symbols(sym) {
-          if($.type(sym) === 'string' && symbols[sym] === undefined)
-            return symbols[sym] = { toString: function() { return ':' + sym; }};
-          else
-            return symbols[sym];
-        }
 
-        return symbols;
-      })();
-  
+  if(typeof $.sym !== 'function')
 
-    if(typeof $.create !== 'function') 
+    /**
+     * @function $.sym
+     * Adds support for globally unique symbols (like in ruby)
+     * 
+     * @param [String] sym The name of the symbol 
+     * 
+     * @return [Symbol] A unique symbol
+     */
+    $.sym = (function() {
       
-      /**
-       * @function $.create
-       *
-       * Creates a new class, which can be initialized
-       */      
-      $.create = function(name, specs) {
-        
-        // extract information from the class-specification and create constructor
-        var klass = $.extend(function() {
-          
-          if(!!klass.superclass)
-            var proto = new klass.superclass($.sym('dont_initialize'));
-            
-          else
-            var proto = Object;  
+      function symbols(sym) {
+        if($.type(sym) === 'string' && symbols[sym] === undefined)
+          return symbols[sym] = { toString: function() { return ':' + sym; }};
+        else
+          return symbols[sym];
+      }
 
-          var constructor = function(args) {
-                  
-            var instance = this;
-            
-            // 1. Apply Mixins
-            klass.applyAsMixin(instance);    
-            
-            // 2. Apply own properties
-            $.extend(true, instance, self, {
-              klass: constructor,
+      return symbols;
+    })();
+
+
+  if(typeof $.create !== 'function') 
+    
+    /**
+     * @function $.create
+     *
+     * Creates a new class, which can be initialized - more information see README.md
+     */      
+    $.create = function(name, specs) {
+      
+      // extract information from the class-specification and create constructor
+      var klass = $.extend(function() {
+        
+        if(!!klass.superclass)
+          var proto = new klass.superclass($.sym('dont_initialize'));
           
-              // add initializeParent to instance
-              initParent: function() {
-              
-                if($.type(proto.initialize) === 'function')
-                  proto.initialize.apply(proto, arguments);
-              }
-            });
-               
-            // 3. Call initialize (check for global symbol dont_initialize first)
-            //    If a constructor is called within the inheritance chain, we don't want
-            //    to initialize the class automatically
-            if(args[0] !== $.sym('dont_initialize'))          
-              self.initialize.apply(instance, args);
-          };
-          $.extend(constructor, klass, {
-            prototype: proto
+        else
+          var proto = Object;  
+
+        var constructor = function(args) {
+                
+          var instance = this;
+          
+          // 1. Apply Mixins
+          klass.applyAsMixin(instance);    
+          
+          // 2. Apply own properties
+          $.extend(true, instance, self, {
+            klass: constructor,
+        
+            // add initializeParent to instance
+            initParent: function() {
+            
+              if($.type(proto.initialize) === 'function')
+                proto.initialize.apply(proto, arguments);
+            }
           });
-          
-          return new constructor(arguments);
-        }, specs.statics);
-
-        var self = {
-          initialize: specs.initialize || function() { 
-            this.initParent.apply(this, arguments); 
-          }
+             
+          // 3. Call initialize (check for global symbol dont_initialize first)
+          //    If a constructor is called within the inheritance chain, we don't want
+          //    to initialize the class automatically
+          if(args[0] !== $.sym('dont_initialize'))          
+            self.initialize.apply(instance, args);
         };
-        
-        $.extend(klass, {
-          
-          // Takes a string or an array or undefined and returns an array of resolved mixins
-          mixins: $.map(($.type(specs.mixins) === 'string')? [specs.mixins] : specs.mixins || [], 
-            function(mixin) { return $.resolve(mixin); }),
-
-          superclass: $.resolve(specs.extend),
-          
-          toString: function() { return name; },
-
-          applyAsMixin: function(obj) {
-            $.extend(true, obj, self);
-            
-            // if this klass has mixins, they have to be applied recursive
-            $.each(klass.mixins, function(i, mixin) {
-              if($.type(mixin.applyAsMixin) === 'function')
-                mixin.applyAsMixin(obj);
-            });
-          }
+        $.extend(constructor, klass, {
+          prototype: proto
         });
         
-        // After saving some properties in klass, delete them from the instance-template
-        $.extend(self, $.clone_without(specs, 'initialize', 'mixins', 'extend', 'statics'));
+        return new constructor(arguments);
+      }, specs.statics);
 
-        $.define(name, klass);
-      }   
+      var self = {
+        initialize: specs.initialize || function() { 
+          this.initParent.apply(this, arguments); 
+        }
+      };
+      
+      $.extend(klass, {
+        
+        // Takes a string or an array or undefined and returns an array of resolved mixins
+        mixins: $.map(($.type(specs.mixins) === 'string')? [specs.mixins] : specs.mixins || [], 
+          function(mixin) { return $.resolve(mixin); }),
+
+        superclass: $.resolve(specs.extend),
+        
+        toString: function() { return name; },
+
+        applyAsMixin: function(obj) {
+          $.extend(true, obj, self);
+          
+          // if this klass has mixins, they have to be applied recursive
+          $.each(klass.mixins, function(i, mixin) {
+            if($.type(mixin.applyAsMixin) === 'function')
+              mixin.applyAsMixin(obj);
+          });
+        }
+      });      
+
+      // After saving some properties in klass, delete them from the instance-template
+      $.each(['initialize', 'mixins', 'extend', 'statics'], function(i, key) {
+          delete specs[key];      
+      });
+      
+      $.extend(self, specs);      
+
+      $.define(name, klass);
+    }   
 
 })(jQuery, this);
