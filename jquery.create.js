@@ -30,7 +30,7 @@
    * 
    * @return [Object] The resolved Object
    */
-  if(typeof $.resolve !== 'function')
+  if(!$.isFunction($.resolve))
     $.resolve = function(name, repair) {
       
       if($.type(name) !== 'string') return name;      
@@ -48,7 +48,7 @@
       return curr;
     };
 
-  if(typeof $.define !== 'function')
+  if(!$.isFunction($.define))
 
     /**
      * @function $.define
@@ -72,7 +72,7 @@
     }
 
 
-  if(typeof $.sym !== 'function')
+  if(!$.isFunction($.sym))
 
     /**
      * @function $.sym
@@ -94,8 +94,18 @@
       return symbols;
     })();
 
+  // proxy type to work with jquery create
+  var old_type = $.type;
+  $.type = function(obj) {
+    
+    if(!!obj && !!obj.klass)
+      return obj.klass.toString();
+    
+    return old_type(obj);    
+  };
 
-  if(typeof $.create !== 'function') 
+
+  if(!$.isFunction($.create))
     
     /**
      * @function $.create
@@ -103,6 +113,12 @@
      * Creates a new class, which can be initialized - more information see README.md
      */      
     $.create = function(name, specs) {
+      
+      var self = {
+        initialize: specs.initialize || function() {
+          this.initParent.apply(this, arguments);
+        }
+      };
       
       // extract information from the class-specification and create constructor
       var klass = $.extend(function() {
@@ -122,36 +138,35 @@
           
           // 2. Apply own properties
           $.extend(true, instance, self, {
-            klass: constructor,
+            klass: klass,
         
             // add initializeParent to instance
             initParent: function() {
             
-              if($.type(proto.initialize) === 'function')
-                proto.initialize.apply(proto, arguments);
+              if($.isFunction(proto.initialize)) {
+                delete instance.initParent; // prevent endless recursion (why should we call it multiple times)??
+                proto.initialize.apply(instance, arguments);
+              }
             }
           });
              
           // 3. Call initialize (check for global symbol dont_initialize first)
           //    If a constructor is called within the inheritance chain, we don't want
           //    to initialize the class automatically
-          if(args[0] !== $.sym('dont_initialize'))          
+          if(args[0] !== $.sym('dont_initialize'))       
             self.initialize.apply(instance, args);
+            
+
         };
+        
         $.extend(constructor, klass, {
           prototype: proto
         });
         
         return new constructor(arguments);
-      }, specs.statics);
-
-      var self = {
-        initialize: specs.initialize || function() { 
-          this.initParent.apply(this, arguments); 
-        }
-      };
       
-      $.extend(klass, {
+      // extend with statics and other default static-functions
+      }, specs.statics, {
         
         // Takes a string or an array or undefined and returns an array of resolved mixins
         mixins: $.map(($.type(specs.mixins) === 'string')? [specs.mixins] : specs.mixins || [], 
@@ -166,12 +181,15 @@
           
           // if this klass has mixins, they have to be applied recursive
           $.each(klass.mixins, function(i, mixin) {
-            if($.type(mixin.applyAsMixin) === 'function')
+            if($.isFunction(mixin.applyAsMixin))
               mixin.applyAsMixin(obj);
           });
-        }
-      });      
-
+        },
+        
+        // allow access to the instance specification
+        prototype: self
+      });
+      
       // After saving some properties in klass, delete them from the instance-template
       $.each(['initialize', 'mixins', 'extend', 'statics'], function(i, key) {
           delete specs[key];      
@@ -180,6 +198,15 @@
       $.extend(self, specs);      
 
       $.define(name, klass);
+      
+      // fire callbacks
+      if($.isFunction(klass.initialized))
+        klass.initialized();
+      
+      if(klass.superclass && $.isFunction(klass.superclass.extended))
+        klass.superclass.extended(klass);
+        
+      return klass;
     }   
 
 })(jQuery, this);
