@@ -120,59 +120,82 @@
         }
       };
       
-      // extract information from the class-specification and create constructor
-      var klass = $.extend(function() {
-        
-        if(!!klass.superclass)
-          var proto = new klass.superclass($.sym('dont_initialize'));
-          
-        else
-          var proto = Object;  
-
-        var constructor = function(args) {
-                
-          var instance = this;
-          
-          // 1. Apply Mixins
-          klass.applyAsMixin(instance);    
-          
-          // 2. Apply own properties
-          $.extend(true, instance, self, {
-            klass: klass,
-        
-            // add initializeParent to instance
-            initParent: function() {
-            
-              if($.isFunction(proto.initialize)) {
-                delete instance.initParent; // prevent endless recursion (why should we call it multiple times)??
-                proto.initialize.apply(instance, arguments);
-              }
-            }
-          });
-             
-          // 3. Call initialize (check for global symbol dont_initialize first)
-          //    If a constructor is called within the inheritance chain, we don't want
-          //    to initialize the class automatically
-          if(args[0] !== $.sym('dont_initialize'))       
-            self.initialize.apply(instance, args);
-            
-
-        };
-        
-        $.extend(constructor, klass, {
-          prototype: proto
-        });
-        
-        return new constructor(arguments);
+      // stores the prototype
+      var proto;
       
-      // extend with statics and other default static-functions
-      }, specs.statics, {
+      // stores the class
+      var klass; 
+      
+      // the klass's superclass
+      var superclass = $.resolve(specs.extend);
+      
+      // the constructor of the klass
+      var constructor = function() {
+              
+        var instance = this;
+        
+        // 1. Apply Mixins
+        klass.applyAsMixin(instance);    
+        
+        // 2. Apply own properties and instance methods
+        $.extend(true, instance, self, {
+          
+          // used for inspection
+          klass: klass,
+      
+          // add initializeParent to instance
+          initParent: function() {
+          
+            if($.isFunction(proto.initialize)) {
+              delete instance.initParent; // prevent endless recursion (why should we call it multiple times)??
+              proto.initialize.apply(instance, arguments);
+            }
+          }
+        });
+           
+        // 3. Call initialize (check for global symbol dont_initialize first)
+        //    If a constructor is called within the inheritance chain, we don't want
+        //    to initialize the class automatically
+        if(arguments[0] !== $.sym('dont_initialize'))       
+          self.initialize.apply(instance, arguments);          
+
+      };
+      
+      // if we wan't to share the prototype we create it only once per class
+      // This way each instance of klass will have the same prototype, which results in 
+      // faster initialization, but may conflict in some situations
+      //
+      // WARNING: only turn this on, if you know, what you are doing.
+      if(!!specs.share_prototype) {
+        proto = superclass && new superclass($.sym('dont_initialize')) || Object;
+        klass = constructor;
+        klass.prototype = proto;
+        
+      // default: No sharing of the prototype-instance, so we need to wrap the constructor
+      // and create the prototype each time klass is instantiated
+      } else {
+        klass = function() {            
+          proto = superclass && new superclass($.sym('dont_initialize')) || Object;
+          
+          function helper(args) {
+            constructor.apply(this, args);
+          }
+          helper.prototype = proto;
+          return new helper(arguments);
+        };
+      }
+      
+      //
+      // now extend our klass with statics and some builtin-functions
+      //
+      $.extend(klass, specs.statics, {
         
         // Takes a string or an array or undefined and returns an array of resolved mixins
         mixins: $.map(($.type(specs.mixins) === 'string')? [specs.mixins] : specs.mixins || [], 
           function(mixin) { return $.resolve(mixin); }),
 
-        superclass: $.resolve(specs.extend),
+        // save reference to superclass
+        superclass: superclass,
         
         toString: function() { return name; },
 
@@ -181,13 +204,18 @@
           
           // if this klass has mixins, they have to be applied recursive
           $.each(klass.mixins, function(i, mixin) {
+            
             if($.isFunction(mixin.applyAsMixin))
               mixin.applyAsMixin(obj);
+            
+            // we want to mixin a regular object, so copy manually
+            else
+              $.extend(true, obj, mixin);
           });
         },
         
         // allow access to the instance specification
-        prototype: self
+        specification: self
       });
       
       // After saving some properties in klass, delete them from the instance-template
@@ -195,11 +223,15 @@
           delete specs[key];      
       });
       
+      // apply given specification to instance-specification (without the keys deleted above)
       $.extend(self, specs);      
 
+      // resolve name and define name as klass
       $.define(name, klass);
       
+      //
       // fire callbacks
+      //
       if($.isFunction(klass.initialized))
         klass.initialized();
       
